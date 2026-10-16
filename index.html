@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://unpkg.com; style-src 'unsafe-inline' https://unpkg.com; img-src data: https://*.basemaps.cartocdn.com; connect-src https://api.github.com https://gist.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://unpkg.com; style-src 'unsafe-inline' https://unpkg.com; img-src data: https://*.basemaps.cartocdn.com https://server.arcgisonline.com https://tile.openstreetmap.org; connect-src https://api.github.com https://gist.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <title>SRImaster · Atividade</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -146,6 +146,7 @@ main { max-width: 1320px; margin: 0 auto; padding: 24px 28px 48px; display: grid
 #mapa { height: 360px; border-radius: 12px; border: 1px solid var(--border); overflow: hidden; background: var(--surface-2); }
 .mapa-nota { font-size: 11.5px; color: var(--text-3); margin-top: 8px; }
 .leaflet-container { font: inherit; }
+.mapa-invertido .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88); }
 .leaflet-popup-content { margin: 10px 12px; font-size: 13px; }
 
 .vazio { padding: 28px 12px; text-align: center; color: var(--text-2); font-size: 13px; border: 1px dashed var(--border-2); border-radius: 12px; }
@@ -283,6 +284,7 @@ tbody tr:hover td { background: var(--surface-2); }
       </header>
       <div class="corpo">
         <div id="mapa" role="img" aria-label="Mapa com a localização aproximada dos acessos"></div>
+        <div class="mapa-nota" id="mapa-aviso" style="color:var(--warn)"></div>
         <div class="mapa-nota">Localização aproximada pelo IP da internet (cidade do provedor). Com VPN ou rede de celular pode ficar longe do lugar real.</div>
       </div>
     </div>
@@ -661,6 +663,59 @@ function desenharOnline() {
 
 let mapa = null, camada = null, fundoMapa = null, mapaAjustado = false;
 const temaEscuro = () => getComputedStyle(document.documentElement).colorScheme.includes("dark");
+
+/* Fundos de mapa, em ordem. Se um não carregar (servidor recusou ou o navegador bloqueou,
+   ex.: Brave Shields), a página passa sozinha para o seguinte. */
+const FUNDOS = [
+  (escuro) => ({
+    url: `https://{s}.basemaps.cartocdn.com/${escuro ? "dark_all" : "light_all"}/{z}/{x}/{y}{r}.png`,
+    opcoes: { subdomains: "abcd", maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' },
+  }),
+  () => ({
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    opcoes: { maxZoom: 18, attribution: "Tiles &copy; Esri" },
+  }),
+  () => ({
+    url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    opcoes: { maxZoom: 18, attribution: "&copy; OpenStreetMap", referrerPolicy: "strict-origin-when-cross-origin" },
+  }),
+];
+let fundoIdx = 0;
+
+function trocarFundoSePreciso(forcar) {
+  const escuro = temaEscuro();
+  const chave = `${fundoIdx}-${escuro}`;
+  if (fundoMapa && fundoMapa._chave === chave && !forcar) return;
+  if (fundoMapa) mapa.removeLayer(fundoMapa);
+  const { url, opcoes } = FUNDOS[fundoIdx](escuro);
+  const camadaFundo = L.tileLayer(url, opcoes);
+  let erros = 0, carregou = false;
+  camadaFundo.on("tileload", () => { carregou = true; });
+  camadaFundo.on("tileerror", () => {
+    erros += 1;
+    if (!carregou && erros >= 3 && fundoMapa === camadaFundo) {
+      if (fundoIdx < FUNDOS.length - 1) {
+        fundoIdx += 1;
+        console.warn("[mapa] fundo não carregou, tentando o próximo:", fundoIdx);
+        trocarFundoSePreciso(true);
+      } else {
+        $("mapa-aviso").textContent = "O navegador não deixou carregar o desenho do mapa (bloqueador de anúncios ou "
+          + "Brave Shields). Os pontos continuam certos; libere este site no bloqueador para ver o mapa.";
+      }
+    }
+  });
+  camadaFundo._chave = chave;
+  fundoMapa = camadaFundo;
+  camadaFundo.addTo(mapa);
+  camadaFundo.bringToBack();
+  // modo escuro sem fundo escuro próprio: escurece o mapa claro
+  el_mapa_classe(escuro && fundoIdx !== 0);
+}
+
+function el_mapa_classe(inverter) {
+  $("mapa").classList.toggle("mapa-invertido", !!inverter);
+}
 function desenharMapa() {
   const el = $("mapa");
   if (!window.L) {
@@ -671,18 +726,7 @@ function desenharMapa() {
     mapa = L.map(el, { scrollWheelZoom: false, attributionControl: true }).setView([-14.5, -51.5], 4);
     camada = L.layerGroup().addTo(mapa);
   }
-  // mapa do CARTO (dados do OpenStreetMap), claro ou escuro conforme o tema da página.
-  // (os servidores do próprio OpenStreetMap recusam pedidos vindos de páginas como esta)
-  const estilo = temaEscuro() ? "dark_all" : "light_all";
-  if (!fundoMapa || fundoMapa._estilo !== estilo) {
-    if (fundoMapa) mapa.removeLayer(fundoMapa);
-    fundoMapa = L.tileLayer(`https://{s}.basemaps.cartocdn.com/${estilo}/{z}/{x}/{y}{r}.png`, {
-      subdomains: "abcd", maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    }).addTo(mapa);
-    fundoMapa._estilo = estilo;
-    fundoMapa.bringToBack();
-  }
+  trocarFundoSePreciso();
   camada.clearLayers();
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const pontos = new Map();
