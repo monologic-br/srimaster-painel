@@ -1,0 +1,918 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://unpkg.com; style-src 'unsafe-inline' https://unpkg.com; img-src data: https://tile.openstreetmap.org; connect-src https://api.github.com https://gist.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<title>SRImaster · Atividade</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<!--
+  Painel de atividade do SRImaster.
+  Esta página não guarda dado nenhum: tudo é lido, na hora, dos gists secretos da conta
+  do programa no GitHub ("SRImaster atividade AAAA-MM-DD"), com a chave digitada aqui.
+  A chave fica só neste navegador.
+-->
+<style>
+:root {
+  --bg: #eef2f8; --surface: #ffffff; --surface-2: #f6f8fc; --border: #e2e8f2; --border-2: #d3dcec;
+  --text: #0b1f44; --text-2: #55678a; --text-3: #8796b2;
+  --brand: #0d5bf0; --brand-hover: #2a6ff5; --brand-soft: rgba(13, 91, 240, .10);
+  --ok: #138a4b; --ok-soft: rgba(19, 138, 75, .12); --warn: #b45309; --warn-soft: rgba(180, 83, 9, .12);
+  --err: #d92d20; --err-soft: rgba(217, 45, 32, .10); --muted-soft: rgba(85, 103, 138, .12);
+  --violet: #7c3aed; --violet-soft: rgba(124, 58, 237, .12); --teal: #0e7490; --teal-soft: rgba(14, 116, 144, .12);
+  --shadow: 0 1px 2px rgba(13, 40, 90, .06), 0 8px 24px rgba(13, 40, 90, .06);
+  --radius: 16px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1220; --surface: #121b2d; --surface-2: #172238; --border: #1e2a43; --border-2: #2c3c5c;
+    --text: #e9eef8; --text-2: #9babc6; --text-3: #6e7e9d;
+    --brand: #3b7bff; --brand-hover: #5a8fff; --brand-soft: rgba(59, 123, 255, .16);
+    --ok: #34d399; --ok-soft: rgba(52, 211, 153, .14); --warn: #fbbf24; --warn-soft: rgba(251, 191, 36, .14);
+    --err: #f87171; --err-soft: rgba(248, 113, 113, .14); --muted-soft: rgba(155, 171, 198, .12);
+    --violet: #a78bfa; --violet-soft: rgba(167, 139, 250, .14); --teal: #22d3ee; --teal-soft: rgba(34, 211, 238, .12);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1220; --surface: #121b2d; --surface-2: #172238; --border: #1e2a43; --border-2: #2c3c5c;
+  --text: #e9eef8; --text-2: #9babc6; --text-3: #6e7e9d;
+  --brand: #3b7bff; --brand-hover: #5a8fff; --brand-soft: rgba(59, 123, 255, .16);
+  --ok: #34d399; --ok-soft: rgba(52, 211, 153, .14); --warn: #fbbf24; --warn-soft: rgba(251, 191, 36, .14);
+  --err: #f87171; --err-soft: rgba(248, 113, 113, .14); --muted-soft: rgba(155, 171, 198, .12);
+  --violet: #a78bfa; --violet-soft: rgba(167, 139, 250, .14); --teal: #22d3ee; --teal-soft: rgba(34, 211, 238, .12);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.45 "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select { font: inherit; color: inherit; }
+.oculto { display: none !important; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- topo ---------- */
+.topo {
+  position: sticky; top: 0; z-index: 1000;
+  display: flex; align-items: center; gap: 16px; padding: 14px 28px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+.marca { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.marca .logo {
+  width: 34px; height: 34px; border-radius: 10px; flex: none;
+  background: linear-gradient(135deg, #3b82ff, #0d47b8); display: grid; place-items: center;
+  color: #fff; font-weight: 800; font-size: 15px; letter-spacing: -.02em;
+}
+.marca h1 { margin: 0; font-size: 16px; font-weight: 750; letter-spacing: -.01em; white-space: nowrap; }
+.marca p { margin: 0; font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topo .espaco { flex: 1; }
+.estado { font-size: 12px; color: var(--text-2); white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+.ponto { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); flex: none; }
+.ponto.erro { background: var(--err); box-shadow: 0 0 0 3px var(--err-soft); }
+.ponto.carregando { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
+
+.botao {
+  display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px;
+  border-radius: 10px; border: 1px solid var(--border-2); background: var(--surface);
+  cursor: pointer; font-weight: 600; font-size: 13px; white-space: nowrap;
+}
+.botao:hover { border-color: var(--brand); color: var(--brand); }
+.botao.primario { background: var(--brand); border-color: var(--brand); color: #fff; }
+.botao.primario:hover { background: var(--brand-hover); color: #fff; }
+.botao.icone { width: 34px; padding: 0; justify-content: center; }
+.botao svg { width: 16px; height: 16px; }
+.botao:disabled { opacity: .55; cursor: default; }
+
+main { max-width: 1320px; margin: 0 auto; padding: 24px 28px 48px; display: grid; gap: 20px; }
+
+/* ---------- cartões ---------- */
+.cartao { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+.cartao > header { display: flex; align-items: center; gap: 12px; padding: 18px 20px 14px; flex-wrap: wrap; }
+.cartao > header h2 { margin: 0; font-size: 15px; font-weight: 700; }
+.cartao > header .sub { font-size: 12px; color: var(--text-2); }
+.cartao > header .espaco { flex: 1; }
+.cartao .corpo { padding: 0 20px 20px; }
+
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.kpi { padding: 18px 20px; display: grid; gap: 4px; }
+.kpi .rotulo { font-size: 12px; font-weight: 600; color: var(--text-2); display: flex; align-items: center; gap: 8px; }
+.kpi .valor { font-size: 30px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; }
+.kpi .detalhe { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi.destaque .valor { color: var(--brand); }
+
+.agora { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px; }
+.lista-online { display: grid; gap: 10px; }
+.pessoa {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 12px; align-items: center;
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2);
+}
+.avatar {
+  width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--brand-soft); color: var(--brand); font-weight: 800; font-size: 15px; position: relative;
+}
+.avatar::after {
+  content: ""; position: absolute; right: 0; bottom: 0; width: 11px; height: 11px; border-radius: 50%;
+  background: var(--ok); border: 2px solid var(--surface-2);
+}
+.avatar.bloq::after { background: var(--warn); }
+.avatar.login::after { background: var(--text-3); }
+.pessoa .nome { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pessoa .info { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pessoa .lado { text-align: right; font-size: 12px; color: var(--text-2); display: grid; gap: 4px; justify-items: end; }
+
+.etiqueta {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 650; white-space: nowrap; background: var(--muted-soft); color: var(--text-2);
+}
+.etiqueta::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.t-ok { background: var(--ok-soft); color: var(--ok); }
+.t-aviso { background: var(--warn-soft); color: var(--warn); }
+.t-erro { background: var(--err-soft); color: var(--err); }
+.t-marca { background: var(--brand-soft); color: var(--brand); }
+.t-violeta { background: var(--violet-soft); color: var(--violet); }
+.t-teal { background: var(--teal-soft); color: var(--teal); }
+
+#mapa { height: 360px; border-radius: 12px; border: 1px solid var(--border); overflow: hidden; background: var(--surface-2); }
+.mapa-nota { font-size: 11.5px; color: var(--text-3); margin-top: 8px; }
+:root[data-theme="dark"] .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88); } }
+.leaflet-container { font: inherit; }
+.leaflet-popup-content { margin: 10px 12px; font-size: 13px; }
+
+.vazio { padding: 28px 12px; text-align: center; color: var(--text-2); font-size: 13px; border: 1px dashed var(--border-2); border-radius: 12px; }
+
+/* ---------- filtros e tabela ---------- */
+.filtros { display: flex; gap: 10px; flex-wrap: wrap; padding: 0 20px 14px; }
+.filtros select, .filtros input {
+  height: 34px; border: 1px solid var(--border-2); border-radius: 10px; background: var(--surface-2);
+  padding: 0 10px; min-width: 0;
+}
+.filtros input[type="search"] { flex: 1 1 220px; }
+.filtros select:focus, .filtros input:focus, .entrada input:focus { outline: 2px solid var(--brand-soft); border-color: var(--brand); }
+
+.tabela-caixa { overflow: auto; max-height: 620px; border-top: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th {
+  position: sticky; top: 0; z-index: 1; background: var(--surface); font-size: 11.5px; font-weight: 700;
+  color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap;
+}
+td { font-size: 13px; }
+td.quando { white-space: nowrap; color: var(--text-2); }
+td.quando b { color: var(--text); font-weight: 650; }
+td.quem { white-space: nowrap; font-weight: 650; }
+td.onde { color: var(--text-2); font-size: 12px; min-width: 140px; }
+td .dados { display: block; margin-top: 2px; font-size: 12px; color: var(--text-3); }
+tbody tr:hover td { background: var(--surface-2); }
+.mais { display: flex; justify-content: center; padding: 14px; }
+.rodape-tabela { display: flex; align-items: center; gap: 10px; padding: 12px 20px; font-size: 12px; color: var(--text-2); }
+
+/* ---------- entrada (chave) ---------- */
+.entrada { min-height: calc(100vh - 64px); display: grid; place-items: center; padding: 24px 16px; }
+.entrada .cartao { width: min(460px, 100%); padding: 28px; display: grid; gap: 14px; }
+.entrada h2 { margin: 0; font-size: 20px; }
+.entrada p { margin: 0; color: var(--text-2); font-size: 13px; }
+.entrada input[type="password"] {
+  height: 42px; border: 1px solid var(--border-2); border-radius: 12px; background: var(--surface-2); padding: 0 14px; width: 100%;
+}
+.entrada label.marcar { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); cursor: pointer; }
+.entrada .botao { height: 42px; justify-content: center; }
+.msg-erro { color: var(--err); font-size: 13px; min-height: 18px; }
+
+.aviso-topo { padding: 10px 14px; border-radius: 12px; background: var(--err-soft); color: var(--err); font-size: 13px; }
+
+@media (max-width: 1080px) { .agora { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  .topo { padding: 12px 16px; gap: 10px; }
+  .marca p, .estado .txt { display: none; }
+  main { padding: 16px 16px 40px; gap: 16px; }
+  .kpi .valor { font-size: 24px; }
+  .cartao > header { padding: 16px 16px 12px; }
+  .cartao .corpo { padding: 0 16px 16px; }
+  .filtros { padding: 0 16px 12px; }
+  .filtros select { flex: 1 1 140px; }
+  #mapa { height: 280px; }
+  .pessoa { grid-template-columns: 36px minmax(0, 1fr); }
+  .pessoa .lado { grid-column: 2; justify-items: start; text-align: left; display: flex; gap: 8px; flex-wrap: wrap; }
+  .esconder-celular { display: none; }
+}
+</style>
+</head>
+<body>
+<header class="topo">
+  <div class="marca">
+    <div class="logo" aria-hidden="true">S</div>
+    <div style="min-width:0">
+      <h1>SRImaster · Atividade</h1>
+      <p id="conta">Quem está usando, de onde e o que foi feito</p>
+    </div>
+  </div>
+  <div class="espaco"></div>
+  <div class="estado oculto" id="estado"><span class="ponto" id="ponto"></span><span class="txt num" id="estado-txt"></span></div>
+  <button class="botao icone oculto" id="btn-atualizar" title="Atualizar agora" aria-label="Atualizar agora">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+  </button>
+  <button class="botao icone" id="btn-tema" title="Modo claro/escuro" aria-label="Modo claro/escuro">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+  <button class="botao oculto" id="btn-sair" title="Esquecer a chave neste navegador">Sair</button>
+</header>
+
+<!-- chave de acesso -->
+<section class="entrada oculto" id="tela-entrada">
+  <form class="cartao" id="form-chave" autocomplete="off">
+    <h2>Painel de atividade</h2>
+    <p>Cole a chave de acesso do GitHub da conta do programa (a mesma usada pelo SRImaster, ou outra da
+      mesma conta com permissão <b>gist</b>). A chave fica só neste navegador e é usada apenas para ler
+      os registros direto do GitHub.</p>
+    <input type="password" id="chave" placeholder="ghp_…" spellcheck="false" aria-label="Chave de acesso do GitHub">
+    <label class="marcar"><input type="checkbox" id="lembrar" checked> Lembrar neste navegador</label>
+    <div class="msg-erro" id="erro-chave" role="alert"></div>
+    <button class="botao primario" type="submit" id="btn-entrar">Entrar</button>
+  </form>
+</section>
+
+<main id="painel" class="oculto">
+  <div class="aviso-topo oculto" id="aviso-rede" role="status"></div>
+
+  <section class="kpis">
+    <div class="cartao kpi destaque">
+      <div class="rotulo">Usando agora</div>
+      <div class="valor num" id="k-online">–</div>
+      <div class="detalhe" id="k-online-d"> </div>
+    </div>
+    <div class="cartao kpi">
+      <div class="rotulo">Acessos hoje</div>
+      <div class="valor num" id="k-acessos">–</div>
+      <div class="detalhe" id="k-acessos-d"> </div>
+    </div>
+    <div class="cartao kpi">
+      <div class="rotulo">Relatórios gerados hoje</div>
+      <div class="valor num" id="k-relatorios">–</div>
+      <div class="detalhe" id="k-relatorios-d"> </div>
+    </div>
+    <div class="cartao kpi">
+      <div class="rotulo">Logins recusados hoje</div>
+      <div class="valor num" id="k-recusados">–</div>
+      <div class="detalhe" id="k-recusados-d"> </div>
+    </div>
+  </section>
+
+  <section class="agora">
+    <div class="cartao">
+      <header>
+        <h2>Usando agora</h2>
+        <span class="sub" id="sub-online"></span>
+      </header>
+      <div class="corpo"><div class="lista-online" id="lista-online"></div></div>
+    </div>
+    <div class="cartao">
+      <header>
+        <h2>Onde estão</h2>
+        <span class="sub">Azul: usando agora · cinza: usaram hoje</span>
+      </header>
+      <div class="corpo">
+        <div id="mapa" role="img" aria-label="Mapa com a localização aproximada dos acessos"></div>
+        <div class="mapa-nota">Localização aproximada pelo IP da internet (cidade do provedor). Com VPN ou rede de celular pode ficar longe do lugar real.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cartao">
+    <header>
+      <h2>Registro de atividade</h2>
+      <span class="sub num" id="sub-registro"></span>
+      <div class="espaco"></div>
+      <button class="botao" id="btn-csv">Exportar CSV</button>
+    </header>
+    <div class="filtros">
+      <select id="f-periodo" aria-label="Período">
+        <option value="hoje">Hoje</option>
+        <option value="ontem">Ontem</option>
+        <option value="7">Últimos 7 dias</option>
+        <option value="30">Últimos 30 dias</option>
+        <option value="data">Escolher o dia…</option>
+      </select>
+      <input type="date" id="f-data" class="oculto" aria-label="Dia">
+      <select id="f-usuario" aria-label="Usuário"><option value="">Todos os usuários</option></select>
+      <select id="f-categoria" aria-label="Tipo">
+        <option value="-nav">Tudo (sem navegação)</option>
+        <option value="">Tudo</option>
+        <option value="acesso">Acessos</option>
+        <option value="seguranca">Segurança</option>
+        <option value="relatorio">Relatórios</option>
+        <option value="trabalho">Preparo do relatório</option>
+        <option value="cadastro">Cadastros</option>
+        <option value="usuarios">Usuários</option>
+        <option value="erro">Erros</option>
+        <option value="nav">Navegação</option>
+      </select>
+      <input type="search" id="f-busca" placeholder="Buscar (cliente, nº, computador, cidade…)" aria-label="Buscar">
+    </div>
+    <div class="tabela-caixa">
+      <table>
+        <thead><tr><th>Quando</th><th>Usuário</th><th>Tipo</th><th>O que fez</th><th class="esconder-celular">Computador</th><th class="esconder-celular">Local</th></tr></thead>
+        <tbody id="corpo-registro"></tbody>
+      </table>
+      <div class="vazio oculto" id="vazio-registro" style="margin:16px 20px">Nenhum registro neste período.</div>
+      <div class="mais oculto" id="mais-registro"><button class="botao" id="btn-mais">Mostrar mais</button></div>
+    </div>
+  </section>
+
+  <section class="cartao">
+    <header>
+      <h2>Sessões</h2>
+      <span class="sub">Cada vez que o programa foi aberto, no período escolhido</span>
+    </header>
+    <div class="tabela-caixa" style="max-height:480px">
+      <table>
+        <thead><tr><th>Início</th><th>Usuário</th><th>Duração</th><th>Relatórios</th><th class="esconder-celular">Computador</th><th class="esconder-celular">Local / IP</th><th>Situação</th></tr></thead>
+        <tbody id="corpo-sessoes"></tbody>
+      </table>
+      <div class="vazio oculto" id="vazio-sessoes" style="margin:16px 20px">Nenhuma sessão neste período.</div>
+    </div>
+    <div class="rodape-tabela num" id="rodape"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const API = "https://api.github.com";
+const PREFIXO = "SRImaster atividade ";
+const ONLINE_MIN = 12;            // sem sinal há mais que isso = não está mais usando
+const ATUALIZAR_S = 60;
+const PAGINA = 300;
+
+/* ---------- utilidades ---------- */
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const pad = (n) => String(n).padStart(2, "0");
+const diaISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const somarDias = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const hora = (ms) => new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+const dataCurta = (ms) => new Date(ms).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+function relativo(ms) {
+  const s = Math.max(0, (Date.now() - ms) / 1000);
+  if (s < 60) return "agora";
+  if (s < 3600) return `há ${Math.round(s / 60)} min`;
+  if (s < 86400) return `há ${Math.floor(s / 3600)} h`;
+  return `há ${Math.floor(s / 86400)} d`;
+}
+function duracao(ms) {
+  const m = Math.max(0, Math.round(ms / 60000));
+  if (m < 60) return `${m} min`;
+  return `${Math.floor(m / 60)} h ${pad(m % 60)}`;
+}
+function ondeTexto(local, completo) {
+  if (!local) return "";
+  const partes = [local.cidade, local.regiao, completo ? local.pais : (local.pais && local.pais !== "BR" ? local.pais : "")].filter(Boolean);
+  return partes.join(", ");
+}
+
+/* ---------- chave ---------- */
+const ARMAZ = "srimaster_painel_chave";
+let chave = null;
+function lerChave() {
+  try { return localStorage.getItem(ARMAZ) || sessionStorage.getItem(ARMAZ) || null; } catch (e) { return null; }
+}
+function guardarChave(v, lembrar) {
+  try {
+    localStorage.removeItem(ARMAZ); sessionStorage.removeItem(ARMAZ);
+    if (v) (lembrar ? localStorage : sessionStorage).setItem(ARMAZ, v);
+  } catch (e) { /* navegador sem armazenamento: vale só nesta aba */ }
+}
+
+class ErroChave extends Error {}
+let restantes = null;
+
+async function gh(caminho) {
+  const r = await fetch(API + caminho, {
+    headers: { "Accept": "application/vnd.github+json", "Authorization": "Bearer " + chave },
+    cache: "no-cache",           // revalida com ETag: resposta 304 não gasta o limite do GitHub
+  });
+  const rl = r.headers.get("x-ratelimit-remaining");
+  if (rl !== null) restantes = rl;
+  if (r.status === 401) throw new ErroChave("A chave foi recusada pelo GitHub.");
+  if (r.status === 403 || r.status === 429) throw new Error("O GitHub pediu uma pausa (limite de uso). Tentando de novo em instantes.");
+  if (!r.ok) throw new Error(`O GitHub respondeu ${r.status}.`);
+  return r.json();
+}
+
+/* ---------- dados ---------- */
+const cacheGists = new Map();     // id -> { atualizado, docs }
+let sessoes = [];                 // sessões juntadas (todas as carregadas)
+let carregando = false;
+
+async function listarGists(desde) {
+  const achados = [];
+  for (let p = 1; p <= 10; p++) {
+    const lista = await gh(`/gists?per_page=100&page=${p}&since=${encodeURIComponent(desde)}`);
+    for (const g of lista) {
+      if ((g.description || "").startsWith(PREFIXO)) achados.push(g);
+    }
+    if (lista.length < 100) break;
+  }
+  return achados;
+}
+
+async function docsDoGist(g) {
+  const guardado = cacheGists.get(g.id);
+  if (guardado && guardado.atualizado === g.updated_at) return guardado.docs;
+  const completo = await gh(`/gists/${encodeURIComponent(g.id)}`);
+  const docs = [];
+  for (const [nome, arq] of Object.entries(completo.files || {})) {
+    if (!nome.startsWith("sessao_")) continue;
+    let texto = arq.content || "";
+    if (arq.truncated && arq.raw_url) {
+      try { texto = await (await fetch(arq.raw_url, { cache: "no-cache" })).text(); } catch (e) { continue; }
+    }
+    try {
+      const d = JSON.parse(texto);
+      if (d && d.sessao) docs.push(d);
+    } catch (e) { /* arquivo estragado: ignora só ele */ }
+  }
+  cacheGists.set(g.id, { atualizado: g.updated_at, docs });
+  return docs;
+}
+
+async function emLotes(itens, fn, tamanho = 4) {
+  const saida = [];
+  for (let i = 0; i < itens.length; i += tamanho) {
+    saida.push(...await Promise.all(itens.slice(i, i + tamanho).map(fn)));
+  }
+  return saida;
+}
+
+function juntar(docs) {
+  const mapa = new Map();
+  for (const d of docs) {
+    const sinal = Date.parse(d.ultimo_sinal || d.inicio || 0) || 0;
+    let s = mapa.get(d.sessao);
+    if (!s) {
+      s = { ...d, eventos: [], _chaves: new Set(), _sinal: -1 };
+      mapa.set(d.sessao, s);
+    }
+    if (sinal >= s._sinal) {
+      const { eventos, _chaves } = s;
+      Object.assign(s, d, { eventos, _chaves, _sinal: sinal });
+    }
+    for (const e of d.eventos || []) {
+      const k = `${e.t}|${e.tipo}|${e.texto}`;
+      if (s._chaves.has(k)) continue;
+      s._chaves.add(k);
+      s.eventos.push({ ...e, _ms: Date.parse(e.t) || 0 });
+    }
+  }
+  const agora = Date.now();
+  const lista = [...mapa.values()];
+  for (const s of lista) {
+    s.eventos.sort((a, b) => a._ms - b._ms);
+    s._inicio = Date.parse(s.inicio) || (s.eventos[0] ? s.eventos[0]._ms : s._sinal);
+    s._fim = s.fim ? Date.parse(s.fim) : null;
+    s._online = !s.fim && !s.fim_sem_aviso && (agora - s._sinal) < ONLINE_MIN * 60000;
+    s._relatorios = s.eventos.filter((e) => e.tipo === "relatorio_ok").length;
+  }
+  lista.sort((a, b) => b._inicio - a._inicio);
+  return lista;
+}
+
+/* ---------- período ---------- */
+function periodo() {
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const v = $("f-periodo").value;
+  let ini = hoje, fim = somarDias(hoje, 1);
+  if (v === "ontem") { ini = somarDias(hoje, -1); fim = hoje; }
+  else if (v === "7") ini = somarDias(hoje, -6);
+  else if (v === "30") ini = somarDias(hoje, -29);
+  else if (v === "data") {
+    const d = $("f-data").value;
+    if (d) { const [a, m, dd] = d.split("-").map(Number); ini = new Date(a, m - 1, dd); fim = somarDias(ini, 1); }
+  }
+  return { ini, fim };
+}
+
+async function carregar() {
+  if (carregando || !chave) return;
+  carregando = true;
+  estado("carregando", "Atualizando…");
+  try {
+    const { ini } = periodo();
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    // sempre ontem e hoje (quem está usando agora) + o período escolhido (com 1 dia antes:
+    // uma sessão que passou da meia-noite começa no gist do dia anterior)
+    const desdeDia = new Date(Math.min(somarDias(ini, -1), somarDias(hoje, -1)));
+    const desde = new Date(desdeDia.getTime() - 86400000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    const gists = await listarGists(desde);
+    const primeiro = diaISO(desdeDia);
+    const uteis = gists.filter((g) => g.description.slice(PREFIXO.length) >= primeiro);
+    const docs = (await emLotes(uteis, docsDoGist)).flat();
+    sessoes = juntar(docs);
+    $("aviso-rede").classList.add("oculto");
+    estado("ok", `Atualizado às ${hora(Date.now())}`);
+    desenhar();
+  } catch (e) {
+    if (e instanceof ErroChave) { sair(e.message); return; }
+    estado("erro", "Sem atualizar");
+    const aviso = $("aviso-rede");
+    aviso.textContent = `Não foi possível ler os registros agora: ${e.message || e}`;
+    aviso.classList.remove("oculto");
+  } finally {
+    carregando = false;
+  }
+}
+
+/* ---------- categorias ---------- */
+const CATEGORIAS = {
+  abriu: ["acesso", "Acesso", "t-marca"], login: ["acesso", "Entrada", "t-ok"], saiu: ["acesso", "Saída", ""],
+  rede: ["acesso", "Rede", ""],
+  login_falhou: ["seguranca", "Senha errada", "t-aviso"], login_bloqueado: ["seguranca", "Bloqueado", "t-erro"],
+  usuario_bloqueado: ["seguranca", "Bloqueio", "t-erro"], login_desativado: ["seguranca", "Desativado", "t-erro"],
+  login_erro: ["seguranca", "Sem conexão", "t-aviso"],
+  tela_bloqueada: ["seguranca", "Tela bloqueada", "t-aviso"], tela_desbloqueada: ["seguranca", "Desbloqueou", "t-ok"],
+  relatorio_inicio: ["relatorio", "Gerando", "t-violeta"], relatorio_ok: ["relatorio", "Relatório", "t-ok"],
+  relatorio_erro: ["relatorio", "Erro no relatório", "t-erro"],
+  equipamento: ["trabalho", "Equipamento", "t-teal"], modelo: ["trabalho", "Modelo", "t-teal"], sessao: ["trabalho", "Sessão", "t-teal"],
+  banco: ["cadastro", "Cadastro", "t-marca"], usuarios: ["usuarios", "Usuários", "t-violeta"],
+  erro: ["erro", "Erro", "t-erro"], tela: ["nav", "Tela", ""],
+};
+const categoria = (tipo) => CATEGORIAS[tipo] || ["outro", tipo, ""];
+
+function eventosDoPeriodo() {
+  const { ini, fim } = periodo();
+  const a = ini.getTime(), b = fim.getTime();
+  const lista = [];
+  for (const s of sessoes) {
+    for (const e of s.eventos) {
+      if (e._ms >= a && e._ms < b) lista.push({ e, s });
+    }
+  }
+  lista.sort((x, y) => y.e._ms - x.e._ms);
+  return lista;
+}
+
+function quemDo(e, s) {
+  return s.usuario || (e.dados && e.dados.usuario) || "";
+}
+
+function filtrar(lista) {
+  const u = $("f-usuario").value, c = $("f-categoria").value;
+  const q = $("f-busca").value.trim().toLowerCase();
+  return lista.filter(({ e, s }) => {
+    const cat = categoria(e.tipo)[0];
+    if (c === "-nav" && cat === "nav") return false;
+    if (c && c !== "-nav" && cat !== c) return false;
+    if (u && quemDo(e, s) !== u) return false;
+    if (q) {
+      const alvo = [e.texto, quemDo(e, s), s.computador, s.usuario_windows, ondeTexto(s.local, true), s.local && s.local.ip,
+        e.dados ? Object.values(e.dados).join(" ") : ""].join(" ").toLowerCase();
+      if (!alvo.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+/* ---------- desenho ---------- */
+let mostrar = PAGINA;
+let filtrados = [];
+
+function desenhar() {
+  desenharResumo();
+  desenharOnline();
+  desenharMapa();
+  preencherUsuarios();
+  desenharRegistro(true);
+  desenharSessoes();
+  $("rodape").textContent = `${sessoes.length} sessões carregadas` + (restantes !== null ? ` · consultas restantes ao GitHub nesta hora: ${restantes}` : "");
+}
+
+function desenharResumo() {
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const h0 = hoje.getTime();
+  const online = sessoes.filter((s) => s._online);
+  const pessoas = new Set(online.filter((s) => s.usuario).map((s) => s.usuario));
+  $("k-online").textContent = online.length;
+  $("k-online-d").textContent = online.length
+    ? `${pessoas.size} ${pessoas.size === 1 ? "usuário" : "usuários"} · ${new Set(online.map((s) => s.computador)).size} computador(es)`
+    : "ninguém com o programa aberto";
+
+  let acessos = 0, relatorios = 0, recusados = 0;
+  const quemEntrou = new Set(), clientes = new Set(), contas = new Set();
+  for (const s of sessoes) {
+    for (const e of s.eventos) {
+      if (e._ms < h0) continue;
+      if (e.tipo === "login") { acessos++; quemEntrou.add(s.usuario); }
+      else if (e.tipo === "relatorio_ok") { relatorios++; if (e.dados && e.dados.cliente) clientes.add(e.dados.cliente); }
+      else if (["login_falhou", "login_bloqueado", "usuario_bloqueado", "login_desativado"].includes(e.tipo)) {
+        recusados++; if (e.dados && e.dados.usuario) contas.add(e.dados.usuario);
+      }
+    }
+  }
+  $("k-acessos").textContent = acessos;
+  $("k-acessos-d").textContent = quemEntrou.size ? [...quemEntrou].filter(Boolean).join(", ") : "nenhum login hoje";
+  $("k-relatorios").textContent = relatorios;
+  $("k-relatorios-d").textContent = clientes.size ? `${clientes.size} cliente(s)` : "nenhum ainda";
+  $("k-recusados").textContent = recusados;
+  $("k-recusados-d").textContent = recusados ? (contas.size ? `contas: ${[...contas].join(", ")}` : "usuário não cadastrado") : "nenhuma tentativa errada";
+}
+
+function situacaoOnline(s) {
+  if (s.bloqueada) return ["Tela bloqueada", "t-aviso", "bloq"];
+  if (!s.usuario) return ["Na tela de login", "", "login"];
+  return ["Usando", "t-ok", ""];
+}
+
+function desenharOnline() {
+  const online = sessoes.filter((s) => s._online).sort((a, b) => (a.usuario || "~").localeCompare(b.usuario || "~"));
+  $("sub-online").textContent = online.length ? `${online.length} ${online.length === 1 ? "sessão aberta" : "sessões abertas"}` : "";
+  const caixa = $("lista-online");
+  if (!online.length) {
+    caixa.innerHTML = `<div class="vazio">Ninguém está usando o SRImaster agora.</div>`;
+    return;
+  }
+  caixa.innerHTML = online.map((s) => {
+    const [txt, tom, av] = situacaoOnline(s);
+    const nome = s.usuario || "—";
+    const desde = s.entrou_em ? Date.parse(s.entrou_em) : s._inicio;
+    const onde = ondeTexto(s.local) || "local desconhecido";
+    return `<div class="pessoa">
+      <div class="avatar ${av}">${esc((nome[0] || "?").toUpperCase())}</div>
+      <div style="min-width:0">
+        <div class="nome">${esc(nome)}</div>
+        <div class="info" title="${esc(s.computador)} · ${esc(s.usuario_windows)}">${esc(s.computador || "?")} · ${esc(onde)}${s.local && s.local.ip ? " · " + esc(s.local.ip) : ""}</div>
+        <div class="info">Tela: ${esc(s.tela || "—")} · desde ${esc(hora(desde))}</div>
+      </div>
+      <div class="lado">
+        <span class="etiqueta ${tom}">${esc(txt)}</span>
+        <span class="num">sinal ${esc(relativo(s._sinal))}</span>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+let mapa = null, camada = null, mapaAjustado = false;
+function desenharMapa() {
+  const el = $("mapa");
+  if (!window.L) {
+    el.innerHTML = `<div class="vazio" style="border:none">O mapa não carregou (sem acesso ao unpkg.com). A lista ao lado continua valendo.</div>`;
+    return;
+  }
+  if (!mapa) {
+    mapa = L.map(el, { scrollWheelZoom: false, attributionControl: true }).setView([-14.5, -51.5], 4);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18, attribution: "&copy; OpenStreetMap",
+    }).addTo(mapa);
+    camada = L.layerGroup().addTo(mapa);
+  }
+  camada.clearLayers();
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const pontos = new Map();
+  for (const s of sessoes) {
+    const loc = s.local;
+    if (!loc || typeof loc.lat !== "number" || typeof loc.lon !== "number") continue;
+    if (!s._online && s._sinal < hoje.getTime()) continue;
+    const k = `${loc.lat.toFixed(3)},${loc.lon.toFixed(3)}`;
+    const p = pontos.get(k) || { lat: loc.lat, lon: loc.lon, onde: ondeTexto(loc, true), online: [], hoje: [] };
+    (s._online ? p.online : p.hoje).push(s);
+    pontos.set(k, p);
+  }
+  const limites = [];
+  const cores = getComputedStyle(document.documentElement);
+  const azul = cores.getPropertyValue("--brand").trim() || "#0d5bf0";
+  const cinza = cores.getPropertyValue("--text-3").trim() || "#8796b2";
+  for (const p of pontos.values()) {
+    const ativo = p.online.length > 0;
+    const marcador = L.circleMarker([p.lat, p.lon], {
+      radius: ativo ? 9 + Math.min(6, p.online.length * 2) : 6,
+      color: "#ffffff", weight: 2, fillColor: ativo ? azul : cinza, fillOpacity: ativo ? 0.95 : 0.75,
+    });
+    const linha = (s) => `<div>${esc(s.usuario || "(login)")} · ${esc(s.computador || "?")}</div>`;
+    marcador.bindPopup(`<b>${esc(p.onde || "Local desconhecido")}</b>`
+      + (p.online.length ? `<div style="margin-top:6px;font-weight:600">Usando agora</div>${p.online.map(linha).join("")}` : "")
+      + (p.hoje.length ? `<div style="margin-top:6px;font-weight:600">Hoje</div>${p.hoje.map(linha).join("")}` : ""));
+    marcador.addTo(camada);
+    limites.push([p.lat, p.lon]);
+  }
+  if (!mapaAjustado && limites.length) {
+    mapaAjustado = true;
+    if (limites.length === 1) mapa.setView(limites[0], 8);
+    else mapa.fitBounds(limites, { padding: [30, 30], maxZoom: 9 });
+  }
+  setTimeout(() => mapa.invalidateSize(), 50);
+}
+
+function preencherUsuarios() {
+  const sel = $("f-usuario");
+  const atual = sel.value;
+  const nomes = new Set();
+  for (const s of sessoes) {
+    if (s.usuario) nomes.add(s.usuario);
+    for (const e of s.eventos) if (e.dados && e.dados.usuario) nomes.add(e.dados.usuario);
+  }
+  const ordenados = [...nomes].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  sel.innerHTML = `<option value="">Todos os usuários</option>` + ordenados.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+  if (ordenados.includes(atual)) sel.value = atual;
+}
+
+const DADOS_VISIVEIS = { cliente: "Cliente", num_rel: "Nº", equipamento: "Equipamento", modelo: "Modelo", arquivo: "Arquivo", segundos: "Tempo (s)", restantes: "Tentativas restantes" };
+function detalhes(e) {
+  if (!e.dados) return "";
+  const partes = [];
+  for (const [k, rot] of Object.entries(DADOS_VISIVEIS)) {
+    const v = e.dados[k];
+    if (v === undefined || v === null || v === "") continue;
+    if (k === "cliente" && String(e.texto).includes(String(v))) continue;
+    partes.push(`${rot}: ${v}`);
+  }
+  return partes.join(" · ");
+}
+
+function desenharRegistro(recomecar) {
+  if (recomecar) mostrar = PAGINA;
+  const todos = eventosDoPeriodo();
+  filtrados = filtrar(todos);
+  const corpo = $("corpo-registro");
+  const multiDia = $("f-periodo").value === "7" || $("f-periodo").value === "30";
+  corpo.innerHTML = filtrados.slice(0, mostrar).map(({ e, s }) => {
+    const [, rot, tom] = categoria(e.tipo);
+    const det = detalhes(e);
+    return `<tr>
+      <td class="quando num">${multiDia ? esc(dataCurta(e._ms)) + " " : ""}<b>${esc(new Date(e._ms).toLocaleTimeString("pt-BR"))}</b></td>
+      <td class="quem">${esc(quemDo(e, s) || "—")}</td>
+      <td><span class="etiqueta ${tom}">${esc(rot)}</span></td>
+      <td>${esc(e.texto)}${det ? `<span class="dados">${esc(det)}</span>` : ""}</td>
+      <td class="onde esconder-celular" title="${esc(s.usuario_windows || "")}">${esc(s.computador || "")}</td>
+      <td class="onde esconder-celular" title="${esc(s.local && s.local.ip || "")}">${esc(ondeTexto(s.local) || "")}</td>
+    </tr>`;
+  }).join("");
+  $("vazio-registro").classList.toggle("oculto", filtrados.length > 0);
+  $("mais-registro").classList.toggle("oculto", filtrados.length <= mostrar);
+  $("sub-registro").textContent = todos.length === filtrados.length
+    ? `${filtrados.length} ${filtrados.length === 1 ? "registro" : "registros"}`
+    : `${filtrados.length} de ${todos.length} registros`;
+}
+
+function desenharSessoes() {
+  const { ini, fim } = periodo();
+  const a = ini.getTime(), b = fim.getTime();
+  const u = $("f-usuario").value;
+  const lista = sessoes.filter((s) => {
+    const termino = s._fim || s._sinal;
+    return s._inicio < b && termino >= a && (!u || s.usuario === u);
+  });
+  $("vazio-sessoes").classList.toggle("oculto", lista.length > 0);
+  $("corpo-sessoes").innerHTML = lista.map((s) => {
+    let sit;
+    if (s._online) { const [t, tom] = situacaoOnline(s); sit = `<span class="etiqueta ${tom}">${esc(t)}</span>`; }
+    else if (s.fim) sit = `<span class="etiqueta">Fechou ${esc(hora(s._fim))}</span>`;
+    else sit = `<span class="etiqueta t-aviso" title="O programa fechou sem avisar (queda de energia, internet ou travamento)">Sem aviso</span>`;
+    const termino = s._fim || s._sinal;
+    const multi = new Date(s._inicio).toDateString() !== new Date().toDateString();
+    return `<tr>
+      <td class="quando num">${multi ? esc(dataCurta(s._inicio)) + " " : ""}<b>${esc(hora(s._inicio))}</b></td>
+      <td class="quem">${esc(s.usuario || "(não entrou)")}</td>
+      <td class="num">${esc(duracao(termino - s._inicio))}</td>
+      <td class="num">${s._relatorios || "–"}</td>
+      <td class="onde esconder-celular">${esc(s.computador || "")}<span class="dados">${esc(s.usuario_windows || "")}${s.versao ? " · v" + esc(s.versao) : ""}</span></td>
+      <td class="onde esconder-celular">${esc(ondeTexto(s.local, true) || "—")}<span class="dados">${esc((s.local && s.local.ip) || "")}${s.local && s.local.provedor ? " · " + esc(s.local.provedor) : ""}</span></td>
+      <td>${sit}</td>
+    </tr>`;
+  }).join("");
+}
+
+function exportarCSV() {
+  const linhas = [["data", "hora", "usuario", "tipo", "descricao", "detalhes", "computador", "usuario_windows", "ip", "cidade", "regiao", "pais", "sessao"]];
+  for (const { e, s } of filtrados) {
+    const d = new Date(e._ms);
+    const loc = s.local || {};
+    linhas.push([d.toLocaleDateString("pt-BR"), d.toLocaleTimeString("pt-BR"), quemDo(e, s), categoria(e.tipo)[1], e.texto, detalhes(e),
+      s.computador, s.usuario_windows, loc.ip, loc.cidade, loc.regiao, loc.pais, s.sessao]);
+  }
+  const csv = "﻿" + linhas.map((l) => l.map((v) => {
+    let t = String(v ?? "");
+    if (/^[=+\-@]/.test(t)) t = "'" + t;          // planilha não executa fórmula vinda do registro
+    return `"${t.replace(/"/g, '""')}"`;
+  }).join(";")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `srimaster-atividade-${diaISO(new Date())}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/* ---------- estado / telas ---------- */
+function estado(tipo, texto) {
+  $("estado").classList.remove("oculto");
+  $("ponto").className = "ponto" + (tipo === "erro" ? " erro" : tipo === "carregando" ? " carregando" : "");
+  $("estado-txt").textContent = texto;
+}
+
+let relogio = null;
+function mostrarPainel() {
+  $("tela-entrada").classList.add("oculto");
+  $("painel").classList.remove("oculto");
+  $("btn-sair").classList.remove("oculto");
+  $("btn-atualizar").classList.remove("oculto");
+  carregar();
+  clearInterval(relogio);
+  relogio = setInterval(() => { if (!document.hidden) carregar(); }, ATUALIZAR_S * 1000);
+}
+
+function sair(mensagem) {
+  chave = null;
+  guardarChave(null);
+  cacheGists.clear();
+  sessoes = [];
+  clearInterval(relogio);
+  $("painel").classList.add("oculto");
+  $("btn-sair").classList.add("oculto");
+  $("btn-atualizar").classList.add("oculto");
+  $("estado").classList.add("oculto");
+  $("conta").textContent = "Quem está usando, de onde e o que foi feito";
+  $("tela-entrada").classList.remove("oculto");
+  $("erro-chave").textContent = mensagem || "";
+  $("chave").value = "";
+  $("chave").focus();
+}
+
+async function entrar(valor, lembrar) {
+  chave = valor;
+  const usuario = await gh("/user");
+  guardarChave(valor, lembrar);
+  $("conta").textContent = `Conta ${usuario.login} · registros dos gists "${PREFIXO.trim()}"`;
+  mostrarPainel();
+}
+
+$("form-chave").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const valor = $("chave").value.trim();
+  if (!valor) { $("erro-chave").textContent = "Cole a chave."; return; }
+  $("btn-entrar").disabled = true;
+  $("erro-chave").textContent = "";
+  try {
+    await entrar(valor, $("lembrar").checked);
+  } catch (e) {
+    chave = null;
+    $("erro-chave").textContent = e instanceof ErroChave ? "O GitHub recusou esta chave." : `Não foi possível conferir a chave: ${e.message || e}`;
+  } finally {
+    $("btn-entrar").disabled = false;
+  }
+});
+
+$("btn-sair").addEventListener("click", () => sair(""));
+$("btn-atualizar").addEventListener("click", () => carregar());
+$("btn-csv").addEventListener("click", exportarCSV);
+$("btn-mais").addEventListener("click", () => { mostrar += PAGINA; desenharRegistro(false); });
+$("f-periodo").addEventListener("change", () => {
+  const escolher = $("f-periodo").value === "data";
+  $("f-data").classList.toggle("oculto", !escolher);
+  if (escolher && !$("f-data").value) $("f-data").value = diaISO(somarDias(new Date(), -1));
+  carregar();
+});
+$("f-data").addEventListener("change", () => carregar());
+$("f-usuario").addEventListener("change", () => { desenharRegistro(true); desenharSessoes(); });
+$("f-categoria").addEventListener("change", () => desenharRegistro(true));
+let atrasoBusca = null;
+$("f-busca").addEventListener("input", () => { clearTimeout(atrasoBusca); atrasoBusca = setTimeout(() => desenharRegistro(true), 200); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && chave) carregar(); });
+
+/* tema claro/escuro (o padrão segue o sistema) */
+const TEMA = "srimaster_painel_tema";
+function aplicarTema(t) {
+  if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  else document.documentElement.removeAttribute("data-theme");
+}
+try { aplicarTema(localStorage.getItem(TEMA)); } catch (e) { /* sem armazenamento */ }
+$("btn-tema").addEventListener("click", () => {
+  const escuroAgora = getComputedStyle(document.documentElement).colorScheme.includes("dark");
+  const novo = escuroAgora ? "light" : "dark";
+  aplicarTema(novo);
+  try { localStorage.setItem(TEMA, novo); } catch (e) { /* ok */ }
+  if (sessoes.length) desenharMapa();
+});
+
+/* início */
+(async () => {
+  const guardada = lerChave();
+  if (!guardada) { sair(""); return; }
+  try { await entrar(guardada, !!(function () { try { return localStorage.getItem(ARMAZ); } catch (e) { return null; } })()); }
+  catch (e) {
+    if (e instanceof ErroChave) sair("A chave guardada foi recusada pelo GitHub. Cole uma chave válida.");
+    else { chave = guardada; mostrarPainel(); }
+  }
+})();
+</script>
+</body>
+</html>
