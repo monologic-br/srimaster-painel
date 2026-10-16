@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://unpkg.com; style-src 'unsafe-inline' https://unpkg.com; img-src data: https://server.arcgisonline.com https://tile.openstreetmap.org; connect-src https://api.github.com https://gist.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://unpkg.com; style-src 'unsafe-inline' https://unpkg.com; img-src data: https://basemaps.cartocdn.com https://server.arcgisonline.com https://tile.openstreetmap.org; connect-src https://api.github.com https://gist.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <title>SRImaster · Atividade</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -666,8 +666,16 @@ const temaEscuro = () => getComputedStyle(document.documentElement).colorScheme.
 
 /* Fundos de mapa, em ordem. Se um não carregar (servidor recusou ou o navegador bloqueou,
    ex.: Brave Shields), a página passa sozinha para o seguinte. */
-// (o CARTO passou a pedir chave paga: devolve a imagem "API KEY REQUIRED")
+// CARTO pede chave (sem ela devolve a imagem "API KEY REQUIRED"). A chave aparece para
+// quem abrir a página de qualquer jeito (vai em cada pedido de mapa): restrinja ao domínio
+// monologic-br.github.io no painel do CARTO. No modo escuro o mapa claro é escurecido.
+const CARTO_CHAVE = "cb1_4m5k_1_80dba86bc7ec660e3d2d4966";
 const FUNDOS = [
+  () => ({
+    url: `https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${CARTO_CHAVE}`,
+    opcoes: { maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' },
+  }),
   (escuro) => ({
     url: escuro
       ? "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
