@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://unpkg.com; style-src 'unsafe-inline' https://unpkg.com; img-src data: https://basemaps.cartocdn.com https://server.arcgisonline.com https://tile.openstreetmap.org; connect-src https://api.github.com https://gist.githubusercontent.com; base-uri 'none'; form-action 'none'">
-<title>SRImaster · Atividade</title>
+<title>Logs de uso</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <!--
@@ -93,6 +93,8 @@ button, input, select { font: inherit; color: inherit; }
 .botao.icone { width: 34px; padding: 0; justify-content: center; }
 .botao svg { width: 16px; height: 16px; }
 .botao:disabled { opacity: .55; cursor: default; }
+.botao.mini { height: 26px; padding: 0 10px; font-size: 12px; border-radius: 8px; }
+.botao.mini.encerrar:hover:not(:disabled) { border-color: var(--err, #d64545); color: var(--err, #d64545); }
 
 main { max-width: 1320px; margin: 0 auto; padding: 24px 28px 48px; display: grid; gap: 20px; }
 
@@ -142,6 +144,8 @@ main { max-width: 1320px; margin: 0 auto; padding: 24px 28px 48px; display: grid
 .t-marca { background: var(--brand-soft); color: var(--brand); }
 .t-violeta { background: var(--violet-soft); color: var(--violet); }
 .t-teal { background: var(--teal-soft); color: var(--teal); }
+.app { padding: 1px 6px; font-size: 10.5px; font-weight: 750; letter-spacing: .3px; margin-left: 6px; vertical-align: 1px; }
+.app::before { display: none; }
 
 #mapa { height: 360px; border-radius: 12px; border: 1px solid var(--border); overflow: hidden; background: var(--surface-2); }
 .mapa-nota { font-size: 11.5px; color: var(--text-3); margin-top: 8px; }
@@ -214,8 +218,7 @@ tbody tr:hover td { background: var(--surface-2); }
   <div class="marca">
     <div class="logo" aria-hidden="true">S</div>
     <div style="min-width:0">
-      <h1>SRImaster · Atividade</h1>
-      <p id="conta">Quem está usando, de onde e o que foi feito</p>
+      <h1>Logs de uso</h1>
     </div>
   </div>
   <div class="espaco"></div>
@@ -233,7 +236,7 @@ tbody tr:hover td { background: var(--surface-2); }
 <section class="entrada oculto" id="tela-entrada">
   <form class="cartao" id="form-chave" autocomplete="off">
     <h2>Painel de atividade</h2>
-    <p>Cole a chave de acesso do GitHub da conta do programa (a mesma usada pelo SRImaster, ou outra da
+    <p>Cole a chave de acesso do GitHub da conta do programa (a mesma usada pelo SRC/SRE, ou outra da
       mesma conta com permissão <b>gist</b>). A chave fica só neste navegador e é usada apenas para ler
       os registros direto do GitHub.</p>
     <input type="password" id="chave" placeholder="ghp_…" spellcheck="false" aria-label="Chave de acesso do GitHub">
@@ -301,11 +304,17 @@ tbody tr:hover td { background: var(--surface-2); }
       <select id="f-periodo" aria-label="Período">
         <option value="hoje">Hoje</option>
         <option value="ontem">Ontem</option>
-        <option value="7">Últimos 7 dias</option>
+        <option value="7" selected>Últimos 7 dias</option>
         <option value="30">Últimos 30 dias</option>
+        <option value="90">Últimos 90 dias</option>
         <option value="data">Escolher o dia…</option>
       </select>
       <input type="date" id="f-data" class="oculto" aria-label="Dia">
+      <select id="f-app" aria-label="App" title="Vale para o painel todo (quem está usando, mapa, registros e sessões)">
+        <option value="">Todos os apps</option>
+        <option value="SRC">SRC · Comprehense</option>
+        <option value="SRE">SRE · Engcare</option>
+      </select>
       <select id="f-usuario" aria-label="Usuário"><option value="">Todos os usuários</option></select>
       <select id="f-categoria" aria-label="Tipo">
         <option value="-nav">Tudo (sem navegação)</option>
@@ -317,6 +326,7 @@ tbody tr:hover td { background: var(--surface-2); }
         <option value="cadastro">Cadastros</option>
         <option value="usuarios">Usuários</option>
         <option value="erro">Erros</option>
+        <option value="suporte">Suporte</option>
         <option value="nav">Navegação</option>
       </select>
       <input type="search" id="f-busca" placeholder="Buscar (cliente, nº, computador, cidade…)" aria-label="Buscar">
@@ -410,10 +420,61 @@ async function gh(caminho) {
   return r.json();
 }
 
+/* grava num gist (usado para pedir o encerramento de uma sessão). Precisa da mesma chave,
+   que tem permissão gist (leitura e escrita dos gists da conta). */
+async function ghPatchGist(id, arquivos) {
+  const r = await fetch(`${API}/gists/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Accept": "application/vnd.github+json", "Authorization": "Bearer " + chave,
+               "Content-Type": "application/json" },
+    body: JSON.stringify({ files: arquivos }),
+  });
+  if (r.status === 401) throw new ErroChave("A chave foi recusada pelo GitHub.");
+  if (r.status === 403 || r.status === 429) throw new Error("O GitHub pediu uma pausa (limite de uso).");
+  if (!r.ok) throw new Error(`O GitHub respondeu ${r.status}.`);
+  return r.json();
+}
+
+/* pede ao programa para fechar a sessão: grava "comando_<sessao>.json" no gist do dia dela.
+   O programa acha esse arquivo no próximo sinal (até ~5 min) e se fecha, salvando o que
+   estava preenchido. */
+async function encerrarSessao(sessao) {
+  const s = sessoes.find((x) => x.sessao === sessao);
+  if (!s) return;
+  if (!s._gistId) { alert("Não foi possível descobrir onde gravar o pedido para esta sessão."); return; }
+  const quem = (s.usuario ? `${s.usuario} ` : "") + `(${s.computador || "?"})`;
+  if (!confirm(`Encerrar a sessão de ${quem}?\n\nO programa vai fechar em até 5 minutos, `
+             + `salvando o que a pessoa preencheu. Ela poderá abrir de novo depois.`)) return;
+  const arquivo = `comando_${sessao}.json`;
+  const corpo = JSON.stringify({ acao: "encerrar", em: new Date().toISOString(),
+                                 por: "painel" }, null, 1);
+  const botao = document.querySelector(`[data-encerrar="${CSS.escape(sessao)}"]`);
+  if (botao) { botao.disabled = true; botao.textContent = "Enviando…"; }
+  try {
+    await ghPatchGist(s._gistId, { [arquivo]: { content: corpo } });
+    s._pedidoEncerrar = Date.now();
+    if (botao) { botao.textContent = "Pedido enviado"; }
+  } catch (e) {
+    if (botao) { botao.disabled = false; botao.textContent = "Encerrar"; }
+    alert(`Não foi possível enviar o pedido: ${e.message || e}`);
+  }
+}
+
+
 /* ---------- dados ---------- */
 const cacheGists = new Map();     // id -> { atualizado, docs }
 let sessoes = [];                 // sessões juntadas (todas as carregadas)
+let visiveis = [];                // as do app escolhido no filtro (todas, sem filtro)
 let carregando = false;
+
+/* app de cada sessão: SRC (Comprehense) ou SRE (Engcare). Registros de antes da separação
+   não têm o campo: eram do SRImaster, que virou o SRC. */
+const appDe = (s) => (s && s.app) || "SRC";
+const chipApp = (s) => `<span class="etiqueta app ${appDe(s) === "SRE" ? "t-teal" : "t-marca"}">${esc(appDe(s))}</span>`;
+function aplicarFiltroApp() {
+  const a = $("f-app").value;
+  visiveis = a ? sessoes.filter((s) => appDe(s) === a) : sessoes;
+}
 
 async function listarGists(desde) {
   const achados = [];
@@ -440,7 +501,7 @@ async function docsDoGist(g) {
     }
     try {
       const d = JSON.parse(texto);
-      if (d && d.sessao) docs.push(d);
+      if (d && d.sessao) { d._gistId = g.id; docs.push(d); }
     } catch (e) { /* arquivo estragado: ignora só ele */ }
   }
   cacheGists.set(g.id, { atualizado: g.updated_at, docs });
@@ -496,6 +557,7 @@ function periodo() {
   if (v === "ontem") { ini = somarDias(hoje, -1); fim = hoje; }
   else if (v === "7") ini = somarDias(hoje, -6);
   else if (v === "30") ini = somarDias(hoje, -29);
+  else if (v === "90") ini = somarDias(hoje, -89);
   else if (v === "data") {
     const d = $("f-data").value;
     if (d) { const [a, m, dd] = d.split("-").map(Number); ini = new Date(a, m - 1, dd); fim = somarDias(ini, 1); }
@@ -543,9 +605,12 @@ const CATEGORIAS = {
   tela_bloqueada: ["seguranca", "Tela bloqueada", "t-aviso"], tela_desbloqueada: ["seguranca", "Desbloqueou", "t-ok"],
   relatorio_inicio: ["relatorio", "Gerando", "t-violeta"], relatorio_ok: ["relatorio", "Relatório", "t-ok"],
   relatorio_erro: ["relatorio", "Erro no relatório", "t-erro"],
+  relatorio_aviso: ["relatorio", "Aviso no relatório", "t-aviso"],
   equipamento: ["trabalho", "Equipamento", "t-teal"], modelo: ["trabalho", "Modelo", "t-teal"], sessao: ["trabalho", "Sessão", "t-teal"],
   banco: ["cadastro", "Cadastro", "t-marca"], usuarios: ["usuarios", "Usuários", "t-violeta"],
   erro: ["erro", "Erro", "t-erro"], tela: ["nav", "Tela", ""],
+  suporte: ["suporte", "Suporte", "t-violeta"],
+  encerrado_remoto: ["seguranca", "Encerrada pelo painel", "t-aviso"],
 };
 const categoria = (tipo) => CATEGORIAS[tipo] || ["outro", tipo, ""];
 
@@ -553,7 +618,7 @@ function eventosDoPeriodo() {
   const { ini, fim } = periodo();
   const a = ini.getTime(), b = fim.getTime();
   const lista = [];
-  for (const s of sessoes) {
+  for (const s of visiveis) {
     for (const e of s.eventos) {
       if (e._ms >= a && e._ms < b) lista.push({ e, s });
     }
@@ -588,6 +653,7 @@ let mostrar = PAGINA;
 let filtrados = [];
 
 function desenhar() {
+  aplicarFiltroApp();
   desenharResumo();
   desenharOnline();
   desenharMapa();
@@ -600,7 +666,7 @@ function desenhar() {
 function desenharResumo() {
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const h0 = hoje.getTime();
-  const online = sessoes.filter((s) => s._online);
+  const online = visiveis.filter((s) => s._online);
   const pessoas = new Set(online.filter((s) => s.usuario).map((s) => s.usuario));
   $("k-online").textContent = online.length;
   $("k-online-d").textContent = online.length
@@ -609,7 +675,7 @@ function desenharResumo() {
 
   let acessos = 0, relatorios = 0, recusados = 0;
   const quemEntrou = new Set(), clientes = new Set(), contas = new Set();
-  for (const s of sessoes) {
+  for (const s of visiveis) {
     for (const e of s.eventos) {
       if (e._ms < h0) continue;
       if (e.tipo === "login") { acessos++; quemEntrou.add(s.usuario); }
@@ -634,11 +700,12 @@ function situacaoOnline(s) {
 }
 
 function desenharOnline() {
-  const online = sessoes.filter((s) => s._online).sort((a, b) => (a.usuario || "~").localeCompare(b.usuario || "~"));
+  const online = visiveis.filter((s) => s._online).sort((a, b) => (a.usuario || "~").localeCompare(b.usuario || "~"));
   $("sub-online").textContent = online.length ? `${online.length} ${online.length === 1 ? "sessão aberta" : "sessões abertas"}` : "";
   const caixa = $("lista-online");
   if (!online.length) {
-    caixa.innerHTML = `<div class="vazio">Ninguém está usando o SRImaster agora.</div>`;
+    const qual = $("f-app").value;
+    caixa.innerHTML = `<div class="vazio">Ninguém está usando ${qual ? "o " + esc(qual) : "o programa"} agora.</div>`;
     return;
   }
   caixa.innerHTML = online.map((s) => {
@@ -649,16 +716,20 @@ function desenharOnline() {
     return `<div class="pessoa">
       <div class="avatar ${av}">${esc((nome[0] || "?").toUpperCase())}</div>
       <div style="min-width:0">
-        <div class="nome">${esc(nome)}</div>
+        <div class="nome">${esc(nome)}${chipApp(s)}</div>
         <div class="info" title="${esc(s.computador)} · ${esc(s.usuario_windows)}">${esc(s.computador || "?")} · ${esc(onde)}${s.local && s.local.ip ? " · " + esc(s.local.ip) : ""}</div>
         <div class="info">Tela: ${esc(s.tela || "—")} · desde ${esc(hora(desde))}</div>
       </div>
       <div class="lado">
         <span class="etiqueta ${tom}">${esc(txt)}</span>
         <span class="num">sinal ${esc(relativo(s._sinal))}</span>
+        <button class="botao mini encerrar" data-encerrar="${esc(s.sessao)}"${s._pedidoEncerrar ? " disabled" : ""} title="Fechar esta sessão no computador da pessoa">${s._pedidoEncerrar ? "Pedido enviado" : "Encerrar"}</button>
       </div>
     </div>`;
   }).join("");
+  caixa.querySelectorAll("[data-encerrar]").forEach((b) => {
+    b.addEventListener("click", () => encerrarSessao(b.getAttribute("data-encerrar")));
+  });
 }
 
 let mapa = null, camada = null, fundoMapa = null, mapaAjustado = false;
@@ -737,7 +808,7 @@ function desenharMapa() {
   camada.clearLayers();
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const pontos = new Map();
-  for (const s of sessoes) {
+  for (const s of visiveis) {
     const loc = s.local;
     if (!loc || typeof loc.lat !== "number" || typeof loc.lon !== "number") continue;
     if (!s._online && s._sinal < hoje.getTime()) continue;
@@ -756,7 +827,7 @@ function desenharMapa() {
       radius: ativo ? 9 + Math.min(6, p.online.length * 2) : 6,
       color: "#ffffff", weight: 2, fillColor: ativo ? azul : cinza, fillOpacity: ativo ? 0.95 : 0.75,
     });
-    const linha = (s) => `<div>${esc(s.usuario || "(login)")} · ${esc(s.computador || "?")}</div>`;
+    const linha = (s) => `<div>${esc(s.usuario || "(login)")} · ${esc(appDe(s))} · ${esc(s.computador || "?")}</div>`;
     marcador.bindPopup(`<b>${esc(p.onde || "Local desconhecido")}</b>`
       + (p.online.length ? `<div style="margin-top:6px;font-weight:600">Usando agora</div>${p.online.map(linha).join("")}` : "")
       + (p.hoje.length ? `<div style="margin-top:6px;font-weight:600">Hoje</div>${p.hoje.map(linha).join("")}` : ""));
@@ -775,7 +846,7 @@ function preencherUsuarios() {
   const sel = $("f-usuario");
   const atual = sel.value;
   const nomes = new Set();
-  for (const s of sessoes) {
+  for (const s of visiveis) {
     if (s.usuario) nomes.add(s.usuario);
     for (const e of s.eventos) if (e.dados && e.dados.usuario) nomes.add(e.dados.usuario);
   }
@@ -784,7 +855,7 @@ function preencherUsuarios() {
   if (ordenados.includes(atual)) sel.value = atual;
 }
 
-const DADOS_VISIVEIS = { cliente: "Cliente", num_rel: "Nº", equipamento: "Equipamento", modelo: "Modelo", arquivo: "Arquivo", segundos: "Tempo (s)", restantes: "Tentativas restantes" };
+const DADOS_VISIVEIS = { cliente: "Cliente", num_rel: "Nº", equipamento: "Equipamento", modelo: "Modelo", arquivo: "Arquivo", segundos: "Tempo (s)", restantes: "Tentativas restantes", chamado: "Chamado" };
 function detalhes(e) {
   if (!e.dados) return "";
   const partes = [];
@@ -802,13 +873,13 @@ function desenharRegistro(recomecar) {
   const todos = eventosDoPeriodo();
   filtrados = filtrar(todos);
   const corpo = $("corpo-registro");
-  const multiDia = $("f-periodo").value === "7" || $("f-periodo").value === "30";
+  const multiDia = !["hoje", "ontem", "data"].includes($("f-periodo").value);
   corpo.innerHTML = filtrados.slice(0, mostrar).map(({ e, s }) => {
     const [, rot, tom] = categoria(e.tipo);
     const det = detalhes(e);
     return `<tr>
       <td class="quando num">${multiDia ? esc(dataCurta(e._ms)) + " " : ""}<b>${esc(new Date(e._ms).toLocaleTimeString("pt-BR"))}</b></td>
-      <td class="quem">${esc(quemDo(e, s) || "—")}</td>
+      <td class="quem">${esc(quemDo(e, s) || "—")}${chipApp(s)}</td>
       <td><span class="etiqueta ${tom}">${esc(rot)}</span></td>
       <td>${esc(e.texto)}${det ? `<span class="dados">${esc(det)}</span>` : ""}</td>
       <td class="onde esconder-celular" title="${esc(s.usuario_windows || "")}">${esc(s.computador || "")}</td>
@@ -826,7 +897,7 @@ function desenharSessoes() {
   const { ini, fim } = periodo();
   const a = ini.getTime(), b = fim.getTime();
   const u = $("f-usuario").value;
-  const lista = sessoes.filter((s) => {
+  const lista = visiveis.filter((s) => {
     const termino = s._fim || s._sinal;
     return s._inicio < b && termino >= a && (!u || s.usuario === u);
   });
@@ -840,7 +911,7 @@ function desenharSessoes() {
     const multi = new Date(s._inicio).toDateString() !== new Date().toDateString();
     return `<tr>
       <td class="quando num">${multi ? esc(dataCurta(s._inicio)) + " " : ""}<b>${esc(hora(s._inicio))}</b></td>
-      <td class="quem">${esc(s.usuario || "(não entrou)")}</td>
+      <td class="quem">${esc(s.usuario || "(não entrou)")}${chipApp(s)}</td>
       <td class="num">${esc(duracao(termino - s._inicio))}</td>
       <td class="num">${s._relatorios || "–"}</td>
       <td class="onde esconder-celular">${esc(s.computador || "")}<span class="dados">${esc(s.usuario_windows || "")}${s.versao ? " · v" + esc(s.versao) : ""}</span></td>
@@ -851,11 +922,11 @@ function desenharSessoes() {
 }
 
 function exportarCSV() {
-  const linhas = [["data", "hora", "usuario", "tipo", "descricao", "detalhes", "computador", "usuario_windows", "ip", "cidade", "regiao", "pais", "sessao"]];
+  const linhas = [["data", "hora", "app", "usuario", "tipo", "descricao", "detalhes", "computador", "usuario_windows", "ip", "cidade", "regiao", "pais", "sessao"]];
   for (const { e, s } of filtrados) {
     const d = new Date(e._ms);
     const loc = s.local || {};
-    linhas.push([d.toLocaleDateString("pt-BR"), d.toLocaleTimeString("pt-BR"), quemDo(e, s), categoria(e.tipo)[1], e.texto, detalhes(e),
+    linhas.push([d.toLocaleDateString("pt-BR"), d.toLocaleTimeString("pt-BR"), appDe(s), quemDo(e, s), categoria(e.tipo)[1], e.texto, detalhes(e),
       s.computador, s.usuario_windows, loc.ip, loc.cidade, loc.regiao, loc.pais, s.sessao]);
   }
   const csv = "﻿" + linhas.map((l) => l.map((v) => {
@@ -894,12 +965,12 @@ function sair(mensagem) {
   guardarChave(null);
   cacheGists.clear();
   sessoes = [];
+  visiveis = [];
   clearInterval(relogio);
   $("painel").classList.add("oculto");
   $("btn-sair").classList.add("oculto");
   $("btn-atualizar").classList.add("oculto");
   $("estado").classList.add("oculto");
-  $("conta").textContent = "Quem está usando, de onde e o que foi feito";
   $("tela-entrada").classList.remove("oculto");
   $("erro-chave").textContent = mensagem || "";
   $("chave").value = "";
@@ -908,9 +979,8 @@ function sair(mensagem) {
 
 async function entrar(valor, lembrar) {
   chave = valor;
-  const usuario = await gh("/user");
+  await gh("/user");                 // confere a chave (recusada = volta para a tela da chave)
   guardarChave(valor, lembrar);
-  $("conta").textContent = `Conta ${usuario.login} · registros dos gists "${PREFIXO.trim()}"`;
   mostrarPainel();
 }
 
@@ -934,13 +1004,31 @@ $("btn-sair").addEventListener("click", () => sair(""));
 $("btn-atualizar").addEventListener("click", () => carregar());
 $("btn-csv").addEventListener("click", exportarCSV);
 $("btn-mais").addEventListener("click", () => { mostrar += PAGINA; desenharRegistro(false); });
+/* o período escolhido fica guardado neste navegador (o padrão é "últimos 7 dias":
+   abrir o painel no dia seguinte não "some" com o que aconteceu ontem) */
+const PERIODO = "srimaster_painel_periodo";
+try {
+  const salvo = localStorage.getItem(PERIODO);
+  if (salvo && [...$("f-periodo").options].some((o) => o.value === salvo && salvo !== "data")) $("f-periodo").value = salvo;
+} catch (e) { /* sem armazenamento */ }
 $("f-periodo").addEventListener("change", () => {
+  try { localStorage.setItem(PERIODO, $("f-periodo").value); } catch (e) { /* ok */ }
   const escolher = $("f-periodo").value === "data";
   $("f-data").classList.toggle("oculto", !escolher);
   if (escolher && !$("f-data").value) $("f-data").value = diaISO(somarDias(new Date(), -1));
   carregar();
 });
 $("f-data").addEventListener("change", () => carregar());
+/* filtro de app: vale para o painel todo e fica guardado neste navegador */
+const APP = "srimaster_painel_app";
+try {
+  const salvo = localStorage.getItem(APP);
+  if (salvo && [...$("f-app").options].some((o) => o.value === salvo)) $("f-app").value = salvo;
+} catch (e) { /* sem armazenamento */ }
+$("f-app").addEventListener("change", () => {
+  try { localStorage.setItem(APP, $("f-app").value); } catch (e) { /* ok */ }
+  if (sessoes.length) desenhar();
+});
 $("f-usuario").addEventListener("change", () => { desenharRegistro(true); desenharSessoes(); });
 $("f-categoria").addEventListener("change", () => desenharRegistro(true));
 let atrasoBusca = null;
